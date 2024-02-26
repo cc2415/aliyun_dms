@@ -1,6 +1,7 @@
 # aliyun_dms
 # 阿里云dms循环取数据
 
+![查看](https://github.com/cc2415/aliyun_dms/blob/main/img_1.jpg)
 ### 先配置好nginx，本地配置虚拟域名
 
 ### F12找到自己在dms上的查询cookie
