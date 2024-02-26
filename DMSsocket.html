@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <style>
+        table, th, td {
+            border: 1px solid black;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+        }
+
+        .plan_box {
+            /*overflow: hidden;*/
+        }
+
+        .plan_box table {
+            border-spacing: 0;
+        }
+
+        .plan_box table thead tr:nth-child(2n+1) {
+            background-color: #FAFAFA;
+        }
+
+        .plan_box table tr {
+            height: 40px;
+            font-size: 14px;
+            color: #666666;
+            line-height: 14px;
+            font-weight: 400;
+        }
+
+        .plan_box table tr:nth-child(2n) {
+            background-color: #FAFAFA;
+        }
+
+        .plan_box table .head {
+            font-size: 14px;
+            color: #666666;
+            line-height: 14px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.7.1/jquery.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<body>
+<p id="time">随机数-</p>
+<input id="cookie" type="text" placeholder="请输入cookie"> 点击我确定
+</br>
+<select id="ku">
+    <option value="库id" selected>yd库-库id</option>
+    <option value="123">activity库-123</option>
+</select>
+<p>已经填过的如果还有效就不用重新填</p>
+<textarea id="sql" cols="70" rows="15"></textarea>
+</br>
+<!--<input type="checkbox" id="selectAll"> 全部查询 （不勾选默认只查前50条）-->
+<input type="text" id="selectCount" placeholder="请输入所需总页数，目前一页50条数据" style="width: 300px"/>
+</br>
+<p id="msg"></p>
+<button onclick="socketIOStart()">执行查询</button>
+<button onclick="saveExcel()">导出excel</button>
+<div id="content" class="plan_box">
+    <table id="TableToExport">
+        <thead id="head">
+        </thead>
+        <tbody id="body">
+        </tbody>
+    </table>
+</div>
+</body>
+<script>
+    var mcookie = '';
+    var socket_url = 'ws://dev.dms.aliyun.com/websocket';
+    var table_data = [];//导出的数据
+    var sql_skip = 0;
+    var success_page = 0;//成功回调的次数
+
+    //清除所有cookie函数
+    function clearAllCookie() {
+        var keys = document.cookie.match(/[^ =;]+(?=\=)/g);
+        if (keys) {
+            for (var i = keys.length; i--;) {
+                document.cookie = keys[i] + '=0;expires=' + new Date(0).toUTCString()
+            }
+        }
+    }
+
+    $("#cookie").change(function () {
+        console.log(123)
+        cookieChange();
+    })
+
+    function cookieChange() {
+        var cookie_arr = $("#cookie").val().split(' ');
+        for (let i = 0; i < cookie_arr.length; i++) {
+            document.cookie = cookie_arr[i] + "; path=/; domain=.aliyun.com";
+        }
+    }
+
+    function saveExcel() {
+        /* Create worksheet from HTML DOM TABLE */
+        // var wb = XLSX.utils.table_to_book(document.getElementById("TableToExport"));
+        /* Export to file (start a download) */
+        // XLSX.writeFile(wb, "SheetJSTable.xlsx");
+
+        // 将二维数组转换为工作表对象
+        var data = [
+            ['姓名', '年龄', '城市'],
+            ['张三', 25, '上海'],
+            ['李四', 30, '北京'],
+        ]
+        const ws = XLSX.utils.aoa_to_sheet(table_data)
+// 创建一个新的工作簿对象
+        const wb = XLSX.utils.book_new()
+// 将工作表对象添加到工作簿中，'Sheet1'为工作表的名称
+        XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
+// 将工作簿数据写入文件，'exported_data.xlsx'为导出文件的名称
+        XLSX.writeFile(wb, 'export.xlsx')
+    }
+
+    // 随机数
+    function randomNum(min, max) {
+        return parseInt(Math.random() * (max - min + 1) + min, 10);
+    }
+
+    /**
+     * 清空表格信息
+     */
+    function ClearTable() {
+        // 清空
+        table_data = [];
+        sql_skip = 0;
+        success_page = 0;
+        $("#head").html('');
+        $("#body").html('');
+    }
+
+    function sleep(second) {
+        var timeStamp = new Date().getTime();
+        let time = second * 1000;
+        var endTime = timeStamp + time;
+        while (true) {
+            console.log('睡眠等待.......');
+            if (new Date().getTime() > endTime) {
+                console.log(new Date().getTime())
+                console.log(endTime)
+                return;
+            }
+        }
+    }
+
+    function socketIOStart() {
+        ClearTable();
+        $("#msg").html("查询中请稍等.......")
+        let select_count = $("#selectCount").val();
+        let column_num = 1;
+        var can_start_next_socket = true
+        for (let select_count_i = 0; select_count_i < select_count; select_count_i++) {
+            console.log("循环次数：" + select_count_i);
+            // 设置cookie
+            let socket = new WebSocket(socket_url);
+            // 修改请求头
+            socket.onopen = function (event) {
+                console.log('准备打开');
+                let sql = $("#sql").val();
+                sql += ` limit ${sql_skip}, 50`;
+                sql_skip += 50;
+                let send_data = {
+                    type: 'execute',
+                    data: {
+                        sql: sql,
+                        dbId: $("#ku").val(),
+                        logic: false,
+                        characterType: '',
+                        switchedHostPort: '',
+                        ignoreConfirm: false,
+                        blobDirectDisplay: false,
+                        blobToHex: false,
+                        binaryToHex: false,
+                        sessionPersistence: false,
+                        dbType: 'mysql',
+                        excutionAbort: false
+                    }
+                };
+                socket.send(JSON.stringify(send_data))
+            }
+            // // 添加事件监听器来处理 WebSocket 连接的各个阶段（打开、关闭、接收消息等）
+            socket.addEventListener('open', function (event) {
+                console.log('WebSocket 连接已打开');
+            });
+
+            socket.addEventListener('close', function (event) {
+                console.log('WebSocket 连接已关闭');
+            });
+
+            socket.addEventListener('message', function (event) {
+                let data = JSON.parse(event.data);
+                console.log(data);
+                console.log(data.type);
+
+                switch (data.type) {
+                    case 'execResList':
+                        let html = '';
+                        // for (let i = 0; i < data.data.length; i++) {
+                        //     console.log(data.data[i])
+                        //     html += `${data.data[i]}`;
+                        // }
+                        // $("#sql").html(html);
+                        break;
+                    case 'execResult':
+                        success_page += 1;
+                        let data_res = data.data;
+                        // 字段
+                        if (table_data.length == 0) {
+                            let columns_arr = data_res.resultSet.columns;
+                            column_num = columns_arr.length;
+                            let columns_name_arr = []
+                            let append_head_html = ``;
+                            for (let i = 0; i < column_num; i++) {
+                                let columns_name = columns_arr[i].realName;
+                                columns_name_arr.push(columns_name)
+                                append_head_html+= `<td class="head">${columns_name}</td>`
+                            }
+                            $("#head").append(append_head_html)
+                            table_data.push(columns_name_arr);
+                        }
+
+                        //查询结果所有行数
+                        let res_arr = data_res.resultSet.result;
+                        let column_name_pref = 'C';
+                        if (res_arr.length == 0) {
+                            return;
+                        }
+                        let append_html = `<tr>`;
+                        for (let i = 0; i < res_arr.length; i++) {
+                            let export_row_data = [];
+                            for (let j = 1; j <= column_num; j++) {
+                                column_name = column_name_pref + "_" + j;
+                                let row_data = res_arr[i][column_name];//每个字段的值
+                                export_row_data.push(row_data);
+                                append_html+=`<td>${row_data}</td>`
+                            }
+                            append_html += `</tr>`;
+                            table_data.push(export_row_data);
+                        }
+                        $("#body").append(append_html);
+                        break;
+                }
+            });
+        }
+    }
+    $("#time").html("测试：" + randomNum(1, 99999));
+    setInterval(function () {
+        let need_page = $("#selectCount").val();
+        if (success_page == need_page){
+            $("#msg").html('查询结束');
+        }
+    }, 1000);
+</script>
+</html>
