@@ -3,6 +3,7 @@
 
 ![查看](https://github.com/cc2415/aliyun_dms/blob/main/img_1.jpg)
 ### 先配置好nginx，本地配置虚拟域名
+### 通过虚拟域名访问这个DMSsocket.html文件
 
 ### F12找到自己在dms上的查询cookie
 
